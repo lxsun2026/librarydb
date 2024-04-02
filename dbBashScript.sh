@@ -1,0 +1,1 @@
+gcc -o librarydb librarydb.c
