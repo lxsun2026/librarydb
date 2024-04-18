@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include "sockutils.h"
+#include "database.h"
 
+#define BUFSIZE 128
 void remove_newline(char* string); 
 void read_from_file(char* filename);
 
@@ -170,14 +173,46 @@ void remove_newline(char* string) { //same logic used in tamidsh.c
     }
 }
 
+
 int main() {
-    char command[50];
-    printf("Welcome to the library database.\nTo get started, type .help.\n");
-    while (1) {
-        printf("> ");
-        fgets(command, 50, stdin);
-        remove_newline(command);
-        handle_command(command);
+    char buffer[BUFSIZE];
+    char* port;
+
+    port = "80";
+    Database* db = database_connect(port);
+    if (!db) {
+        fprintf(stderr, "Failed to connect to database\n");
+        return 1;
     }
+
+    printf("Listening at 0.0.0.0:%s\n", port);
+
+    while (1) {
+        int client = server_accept(db->socket);
+        if (client < 0) {
+            fprintf(stderr, "Failed to accept client connection\n");
+            continue;
+        }
+
+        // Redirect standard input, output, and error to the client socket
+        dup2(client, 0); // Redirect stdin
+        dup2(client, 1); // Redirect stdout
+        dup2(client, 2); // Redirect stderr
+
+        printf("Welcome to the library database.\nTo get started, type .help.\n");
+        while (1) {
+            printf("> ");
+            fgets(buffer, BUFSIZE, stdin);
+            remove_newline(buffer);
+            if (database_execute(db, buffer) < 0) {
+                fprintf(stderr, "Failed to execute command\n");
+            }
+        }
+
+        close(client); // Close client socket
+    }
+
+    database_close(db);
+
     return 0;
 }
